@@ -1,13 +1,17 @@
-version: '2'
+version: '2.1'
 
 services:
-
   elasticsearch:
+    container_name: elasticsearch
     build: elasticsearch/
+    volumes:
+      - elasticsearch_data:/usr/share/elasticsearch/data
     ports:
       - "9200:9200"
       - "9300:9300"
     environment:
+      # This helps Logstash out if it gets too busy
+      LS_HEAP_SIZE: 2048m
       ES_JAVA_OPTS: "-Xmx256m -Xms256m"
       # disable X-Pack
       # see https://www.elastic.co/guide/en/x-pack/current/xpack-settings.html
@@ -18,8 +22,13 @@ services:
       xpack.watcher.enabled: "false"
     networks:
       - elk
+    restart: on-failure
+    # Check that Elasticsearch is responding before hitting it with real requests.
+    healthcheck:
+      test: ['CMD', 'curl', '-f', '-u', 'elastic:changeme', 'http://localhost:9200']
 
   logstash:
+    container_name: logstash
     build: logstash/
     volumes:
       - ./logstash/config/logstash.yml:/usr/share/logstash/config/logstash.yml
@@ -30,10 +39,11 @@ services:
       LS_JAVA_OPTS: "-Xmx256m -Xms256m"
     networks:
       - elk
-    depends_on:
-      - elasticsearch
+    depends_on: {elasticsearch: {condition: service_healthy}}
+    restart: on-failure
 
   kibana:
+    container_name: kibana
     build: kibana/
     volumes:
       - ./kibana/config/:/usr/share/kibana/config
@@ -41,10 +51,113 @@ services:
       - "5601:5601"
     networks:
       - elk
-    depends_on:
-      - elasticsearch
+    depends_on: {elasticsearch: {condition: service_healthy}}
+    restart: on-failure
+    # Check that Kibana is responding before loading dashboards etc.
+    healthcheck:
+      test: ['CMD', 'curl', '-f', 'http://localhost:5601']
+
+  nginx:
+    container_name: nginx
+    build: nginx/
+    ports:
+      - "80:80"
+      - "81:81"
+    networks:
+      - elk
+    restart: on-failure
+
+  curator:
+    container_name: curator
+    build: curator
+    restart: always
+    networks:
+      - elk
+    depends_on: {elasticsearch: {condition: service_healthy}}
+    restart: on-failure
+
+#  kopf:
+#    container_name: kopf
+#    build: kopf/
+#    ports:
+#      - "8080:80"
+#    environment:
+#      KOPF_SERVER_NAME: docker-ELK
+#      KOPF_ES_SERVERS: "elasticsearch:9200"
+#    networks:
+#      - elk
+#    links:
+#      - elasticsearch
+#    restart: on-failure
+
+  grafana:
+    container_name: grafana
+    build: grafana/
+    volumes:
+      - grafana_data:/var/lib/grafana
+    env_file:
+      - grafana/user.config
+    restart: on-failure
+    ports:
+      - 3000:3000
+    networks:
+      - elk
+    depends_on: {elasticsearch: {condition: service_healthy}}
+
+  # Impoer Beast dashboards and indexes: docker-compose exec metricbeat sh -c './scripts/import_dashboards -es $ELASTICSEARCH_URL'
+  metricbeat:
+    container_name: metricbeat
+    build: metricbeat/
+    environment:
+      ELASTICSEARCH_URL: http://elasticsearch:9200
+    volumes:
+      - ./metricbeat/metricbeat.full.yml:/metricbeat/metricbeat.yml
+    networks:
+      - elk
+    depends_on: {elasticsearch: {condition: service_healthy}}
+    restart: on-failure
+
+  packetbeat:
+    container_name: packetbeat
+    build: packetbeat/
+    # Packetbeat needs some elevated privileges capture network traffic.
+    # We'll grant them with POSIX capabilities.
+    cap_add: ['NET_RAW', 'NET_ADMIN']
+    # Use "host mode" networking to allow Packetbeat to capture traffic from
+    # real network interface on the host, rather than being isolated to the
+    # container's virtual interface.
+    network_mode: host
+    # Since we did that, Packetbeat is not part of the "stack" Docker network
+    # that the other containers are connected to, and thus can't resolve the
+    # hostname "elasticsearch". Instead, we'll tell it to find Elasticsearch
+    # on "localhost", which is the Docker host machine in this context.
+    command: packetbeat -v -e -E output.elasticsearch.hosts='["localhost:9200"]'
+    depends_on: {elasticsearch: {condition: service_healthy}}
+    restart: on-failure
+
+# https://github.com/google/cadvisor/issues/1517
+#  cadvisor:
+#    container_name: cadvisor
+#    build: cadvisor/
+#    ports:
+#      - "8888:8080"
+#    volumes:
+#      - /:/rootfs:ro
+#      - /var/run:/var/run:rw
+#      - /sys:/sys:ro
+#      - /var/lib/docker/:/var/lib/docker:ro
+#    networks:
+#      - elk
+#    command: ["-storage_driver=elasticsearch", "-alsologtostderr=true", "-storage_driver_es_host=http://elasticsearch:9200"]
+#    depends_on: {elasticsearch: {condition: service_healthy}}
+#    restart: on-failure
+
+volumes:
+  elasticsearch_data:
+    driver: local
+  grafana_data:
+    driver: local
 
 networks:
-
   elk:
     driver: bridge
