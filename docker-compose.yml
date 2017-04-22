@@ -152,6 +152,23 @@ services:
 #    depends_on: {elasticsearch: {condition: service_healthy}}
 #    restart: on-failure
 
+  logspout:
+    container_name: logspout
+    build: logspout/
+#    ports:
+#      - "8000:80"
+    environment:
+      ROUTE_URIS: "logstash+tcp://logstash:5000"
+      LOGSTASH_TAGS: "elk-claster"
+      RETRY_STARTUP: "yes"
+#      DEBUG: 1
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    networks:
+      - elk
+    restart: on-failure
+
+
 volumes:
   elasticsearch_data:
     driver: local
