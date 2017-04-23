@@ -168,11 +168,33 @@ services:
       - elk
     restart: on-failure
 
+# https://github.com/bitsensor/elastalert-kibana-plugin/issues/2
+  elastalert:
+    container_name: elastalert
+    build: elastalert/
+    environment:
+#      ELASTIC_PWD: changeme
+      ELASTICSEARCH_HOST: elasticsearch
+      ELASTICSEARCH_PORT: 9200
+    volumes:
+      - elastalert_data:/etc/elastalert
+      - elastalert_rules:/usr/share/elastalert/rules
+    networks:
+      - elk
+    links:
+      - elasticsearch:elasticsearchhost
+    depends_on: {elasticsearch: {condition: service_healthy}}
+    restart: on-failure
+
 
 volumes:
   elasticsearch_data:
     driver: local
   grafana_data:
+    driver: local
+  elastalert_data:
+    driver: local
+  elastalert_rules:
     driver: local
 
 networks:

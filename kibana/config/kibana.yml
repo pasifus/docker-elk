@@ -5,6 +5,7 @@
 server.name: kibana
 server.host: "0"
 elasticsearch.url: http://elasticsearch:9200
+elastalert.serverHost: localhost
 
 ## Disable X-Pack
 ## see https://www.elastic.co/guide/en/x-pack/current/xpack-settings.html
