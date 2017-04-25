@@ -35,6 +35,7 @@ services:
       - ./logstash/pipeline:/usr/share/logstash/pipeline
     ports:
       - "5000:5000"
+      - "5044:5044"
     environment:
       LS_JAVA_OPTS: "-Xmx256m -Xms256m"
     networks:
@@ -186,6 +187,25 @@ services:
     depends_on: {elasticsearch: {condition: service_healthy}}
     restart: on-failure
 
+  dockbeat:
+    container_name: dockbeat
+    build: dockbeat/
+#    environment:
+#      PERIOD: 5
+#      DOCKER_SOCKET: unix:///var/run/docker.sock
+#      DOCKER_ENABLE_TLS: false
+#      DOCKER_CA_PATH: ""
+#      DOCKER_CERT_PATH: ""
+#      DOCKER_KEY_PATH: ""
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - ./dockbeat/config/:/etc/dockbeat
+      - dockbeat_logs:/var/logs/dockbeat
+    networks:
+      - elk
+    depends_on: {elasticsearch: {condition: service_healthy}}
+    restart: on-failure
+
 
 volumes:
   elasticsearch_data:
@@ -195,6 +215,8 @@ volumes:
   elastalert_data:
     driver: local
   elastalert_rules:
+    driver: local
+  dockbeat_logs:
     driver: local
 
 networks:

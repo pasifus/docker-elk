@@ -2,6 +2,8 @@
 echo "## BEGING INITIALIZE ELK SCRIPT ######################################################"
 docke-compose up -d
 docker-compose exec metricbeat sh -c './scripts/import_dashboards -es $ELASTICSEARCH_URL'
+# dockbeat dashboard for kibana: https://github.com/Ingensi/dockbeat/issues/69
+docker-compose exec dockbeat sh -c 'curl -XPUT "http://elasticsearch:9200/_template/dockbeat" -d@/go/src/github.com/ingensi/dockbeat/etc/dockbeat.template.json'
 echo "Show added indeses"
 curl 'localhost:9200/_cat/indices?v' 
 # delete kibana indexes
